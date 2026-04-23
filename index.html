@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Flow Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
+    <style>
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-6px); }
+            75% { transform: translateX(6px); }
+        }
+        .shake-error { 
+            animation: shake 0.2s ease-in-out 0s 2; 
+            box-shadow: 0 0 0 2px #ef4444 !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 transition-colors duration-300 min-h-screen p-4 md:p-8 font-sans">
+
+    <div class="max-w-4xl mx-auto space-y-6">
+        <header class="flex justify-between items-center">
+            <div>
+                <h1 id="greeting" class="text-3xl font-bold tracking-tight">Hello!</h1>
+                <p class="text-slate-500 dark:text-slate-400">Manage your day with focus.</p>
+            </div>
+            <button onclick="toggleTheme()" class="p-3 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 hover:scale-105 transition-all">
+                <span id="theme-icon">🌙</span>
+            </button>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <div class="space-y-6">
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 text-center">
+                    <h2 class="text-xs font-bold uppercase tracking-widest mb-4 text-indigo-500">Focus Timer</h2>
+                    <div id="timer-display" class="text-5xl font-mono font-bold mb-6">25:00</div>
+                    <div class="flex justify-center gap-2">
+                        <button onclick="toggleTimer()" id="timer-btn" class="bg-indigo-600 text-white px-5 py-2 rounded-xl hover:bg-indigo-700 transition font-medium">Start</button>
+                        <button onclick="resetTimer()" class="bg-slate-100 dark:bg-slate-700 px-5 py-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition font-medium">Reset</button>
+                    </div>
+                </div>
+
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700">
+                    <h2 class="text-xs font-bold uppercase tracking-widest mb-4 text-emerald-500">Quick Links</h2>
+                    <div id="links-container" class="space-y-2 mb-4"></div>
+                    <div class="space-y-2">
+                        <input type="text" id="link-name" placeholder="Site Name" class="w-full p-2 text-sm rounded-lg bg-slate-100 dark:bg-slate-700 border-none outline-none focus:ring-1 focus:ring-emerald-500">
+                        <div class="flex gap-1">
+                            <input type="text" id="link-url" placeholder="URL (e.g. google.com)" class="flex-1 p-2 text-sm rounded-lg bg-slate-100 dark:bg-slate-700 border-none outline-none focus:ring-1 focus:ring-emerald-500">
+                            <button onclick="addLink()" class="bg-emerald-600 text-white px-3 rounded-lg hover:bg-emerald-700">+</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col">
+                <h2 class="text-xs font-bold uppercase tracking-widest mb-4 text-indigo-500">Tasks</h2>
+                
+                <div id="duplicate-warning" class="hidden text-red-500 text-xs font-bold mb-2 flex items-center gap-1 animate-pulse">
+                    ⚠️ This task already exists!
+                </div>
+
+                <div class="flex gap-2 mb-6">
+                    <input type="text" id="task-input" placeholder="Add a new task..." 
+                           class="flex-1 p-4 rounded-2xl bg-slate-100 dark:bg-slate-700 border-none focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
+                    <button onclick="addTask()" class="bg-indigo-600 text-white px-6 py-2 rounded-2xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 transition-all">Add</button>
+                </div>
+
+                <ul id="task-list" class="space-y-3 overflow-y-auto custom-scroll pr-2 flex-1 min-h-[300px]">
+                    </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- State Management ---
+        let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+        let links = JSON.parse(localStorage.getItem('links')) || [{ name: 'YouTube', url: 'https://youtube.com' }];
+
+        // --- Initialization ---
+        window.onload = () => {
+            updateGreeting();
+            renderTasks();
+            renderLinks();
+            if(localStorage.getItem('theme') === 'light') toggleTheme();
+        };
+
+        function updateGreeting() {
+            const hr = new Date().getHours();
+            const text = hr < 12 ? "Good Morning" : hr < 18 ? "Good Afternoon" : "Good Evening";
+            document.getElementById('greeting').innerText = `${text}!`;
+        }
+
+        // --- Theme Toggle ---
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark');
+            document.getElementById('theme-icon').innerText = isDark ? '🌙' : '☀️';
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        }
+
+        // --- Timer Logic (25m) ---
+        let timerSeconds = 1500;
+        let timerInterval = null;
+
+        function updateTimerDisplay() {
+            const m = Math.floor(timerSeconds / 60);
+            const s = timerSeconds % 60;
+            document.getElementById('timer-display').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        function toggleTimer() {
+            const btn = document.getElementById('timer-btn');
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+                btn.innerText = "Start";
+                btn.className = "bg-indigo-600 text-white px-5 py-2 rounded-xl hover:bg-indigo-700 transition font-medium";
+            } else {
+                btn.innerText = "Stop";
+                btn.className = "bg-red-500 text-white px-5 py-2 rounded-xl hover:bg-red-600 transition font-medium";
+                timerInterval = setInterval(() => {
+                    timerSeconds--;
+                    updateTimerDisplay();
+                    if (timerSeconds <= 0) {
+                        clearInterval(timerInterval);
+                        new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play();
+                        alert("Time's up! Take a break.");
+                        resetTimer();
+                    }
+                }, 1000);
+            }
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            timerSeconds = 1500;
+            updateTimerDisplay();
+            const btn = document.getElementById('timer-btn');
+            btn.innerText = "Start";
+            btn.className = "bg-indigo-600 text-white px-5 py-2 rounded-xl hover:bg-indigo-700 transition font-medium";
+        }
+
+        // --- To-Do Logic ---
+        function addTask() {
+            const input = document.getElementById('task-input');
+            const warning = document.getElementById('duplicate-warning');
+            const text = input.value.trim();
+            
+            if (!text) return;
+
+            // Duplicate Prevention Logic
+            const isDuplicate = tasks.some(t => t.text.toLowerCase() === text.toLowerCase());
+            if (isDuplicate) {
+                warning.classList.remove('hidden');
+                input.classList.add('shake-error');
+                setTimeout(() => {
+                    warning.classList.add('hidden');
+                    input.classList.remove('shake-error');
+                }, 2500);
+                return;
+            }
+
+            tasks.push({ text, completed: false, id: Date.now() });
+            input.value = '';
+            renderTasks();
+        }
+
+        function renderTasks() {
+            const list = document.getElementById('task-list');
+            list.innerHTML = '';
+            
+            // Automatic Sort: Active first, then Completed
+            tasks.sort((a, b) => a.completed - b.completed);
+
+            tasks.forEach((task) => {
+                const li = document.createElement('li');
+                li.className = `group flex items-center justify-between p-4 rounded-2xl transition-all ${task.completed ? 'bg-slate-50 dark:bg-slate-800/40 opacity-60' : 'bg-slate-100 dark:bg-slate-700/50 hover:bg-white dark:hover:bg-slate-700 shadow-sm'}`;
+                li.innerHTML = `
+                    <div class="flex items-center gap-3 flex-1">
+                        <input type="checkbox" ${task.completed ? 'checked' : ''} onchange="toggleTask(${task.id})" 
+                               class="w-5 h-5 rounded-full border-2 border-indigo-500 accent-indigo-600 cursor-pointer">
+                        <span contenteditable="true" onblur="editTask(${task.id}, this.innerText)" 
+                              class="outline-none focus:text-indigo-500 font-medium ${task.completed ? 'line-through' : ''}">${task.text}</span>
+                    </div>
+                    <button onclick="deleteTask(${task.id})" class="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">✕</button>
+                `;
+                list.appendChild(li);
+            });
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+        }
+
+        function toggleTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if(task) task.completed = !task.completed;
+            renderTasks();
+        }
+
+        function editTask(id, newText) {
+            const task = tasks.find(t => t.id === id);
+            if(task) task.text = newText;
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+        }
+
+        function deleteTask(id) {
+            tasks = tasks.filter(t => t.id !== id);
+            renderTasks();
+        }
+
+        // --- Quick Links Logic ---
+        function renderLinks() {
+            const container = document.getElementById('links-container');
+            container.innerHTML = '';
+            links.forEach((link, index) => {
+                const div = document.createElement('div');
+                div.className = "flex justify-between items-center group bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-transparent hover:border-emerald-500/30 transition-all";
+                div.innerHTML = `
+                    <a href="${link.url}" target="_blank" class="text-sm font-semibold text-emerald-600 dark:text-emerald-400 truncate">${link.name}</a>
+                    <button onclick="deleteLink(${index})" class="opacity-0 group-hover:opacity-100 text-xs text-red-500">Delete</button>
+                `;
+                container.appendChild(div);
+            });
+            localStorage.setItem('links', JSON.stringify(links));
+        }
+
+        function addLink() {
+            const name = document.getElementById('link-name').value.trim();
+            const urlIn = document.getElementById('link-url').value.trim();
+            if (!name || !urlIn) return;
+            const url = urlIn.startsWith('http') ? urlIn : `https://${urlIn}`;
+            links.push({ name, url });
+            document.getElementById('link-name').value = '';
+            document.getElementById('link-url').value = '';
+            renderLinks();
+        }
+
+        function deleteLink(index) {
+            links.splice(index, 1);
+            renderLinks();
+        }
+    </script>
+</body>
+</html>
