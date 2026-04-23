@@ -39,8 +39,19 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             
             <div class="space-y-6">
-                <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 text-center">
-                    <h2 class="text-xs font-bold uppercase tracking-widest mb-4 text-indigo-500">Focus Timer</h2>
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 text-center relative group">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xs font-bold uppercase tracking-widest text-indigo-500">Focus Timer</h2>
+                        <button onclick="toggleTimerSettings()" class="text-slate-400 hover:text-indigo-500 transition-colors">⚙️</button>
+                    </div>
+
+                    <div id="timer-settings" class="hidden mb-4 p-3 bg-slate-100 dark:bg-slate-700 rounded-xl space-y-2">
+                        <label class="text-xs font-bold block">Set Minutes:</label>
+                        <input type="number" id="custom-min" value="25" min="1" max="120" 
+                               class="w-full p-1 text-center rounded bg-white dark:bg-slate-600 outline-none border-none">
+                        <button onclick="applyNewTime()" class="text-[10px] bg-indigo-500 text-white px-2 py-1 rounded">Apply</button>
+                    </div>
+
                     <div id="timer-display" class="text-5xl font-mono font-bold mb-6">25:00</div>
                     <div class="flex justify-center gap-2">
                         <button onclick="toggleTimer()" id="timer-btn" class="bg-indigo-600 text-white px-5 py-2 rounded-xl hover:bg-indigo-700 transition font-medium">Start</button>
@@ -84,12 +95,16 @@
         // --- State Management ---
         let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
         let links = JSON.parse(localStorage.getItem('links')) || [{ name: 'YouTube', url: 'https://youtube.com' }];
+        let savedMinutes = localStorage.getItem('timerMinutes') || 25;
 
         // --- Initialization ---
         window.onload = () => {
             updateGreeting();
             renderTasks();
             renderLinks();
+            timerSeconds = savedMinutes * 60;
+            document.getElementById('custom-min').value = savedMinutes;
+            updateTimerDisplay();
             if(localStorage.getItem('theme') === 'light') toggleTheme();
         };
 
@@ -99,14 +114,13 @@
             document.getElementById('greeting').innerText = `${text}!`;
         }
 
-        // --- Theme Toggle ---
         function toggleTheme() {
             const isDark = document.documentElement.classList.toggle('dark');
             document.getElementById('theme-icon').innerText = isDark ? '🌙' : '☀️';
             localStorage.setItem('theme', isDark ? 'dark' : 'light');
         }
 
-        // --- Timer Logic (25m) ---
+        // --- Timer Logic ---
         let timerSeconds = 1500;
         let timerInterval = null;
 
@@ -114,6 +128,24 @@
             const m = Math.floor(timerSeconds / 60);
             const s = timerSeconds % 60;
             document.getElementById('timer-display').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        function toggleTimerSettings() {
+            const panel = document.getElementById('timer-settings');
+            panel.classList.toggle('hidden');
+        }
+
+        function applyNewTime() {
+            const newMin = document.getElementById('custom-min').value;
+            if (newMin < 1) return;
+            clearInterval(timerInterval);
+            timerInterval = null;
+            savedMinutes = newMin;
+            timerSeconds = newMin * 60;
+            localStorage.setItem('timerMinutes', newMin);
+            updateTimerDisplay();
+            document.getElementById('timer-btn').innerText = "Start";
+            toggleTimerSettings();
         }
 
         function toggleTimer() {
@@ -131,8 +163,7 @@
                     updateTimerDisplay();
                     if (timerSeconds <= 0) {
                         clearInterval(timerInterval);
-                        new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play();
-                        alert("Time's up! Take a break.");
+                        alert("Time's up!");
                         resetTimer();
                     }
                 }, 1000);
@@ -142,11 +173,10 @@
         function resetTimer() {
             clearInterval(timerInterval);
             timerInterval = null;
-            timerSeconds = 1500;
+            timerSeconds = savedMinutes * 60;
             updateTimerDisplay();
-            const btn = document.getElementById('timer-btn');
-            btn.innerText = "Start";
-            btn.className = "bg-indigo-600 text-white px-5 py-2 rounded-xl hover:bg-indigo-700 transition font-medium";
+            document.getElementById('timer-btn').innerText = "Start";
+            document.getElementById('timer-btn').className = "bg-indigo-600 text-white px-5 py-2 rounded-xl hover:bg-indigo-700 transition font-medium";
         }
 
         // --- To-Do Logic ---
@@ -154,18 +184,12 @@
             const input = document.getElementById('task-input');
             const warning = document.getElementById('duplicate-warning');
             const text = input.value.trim();
-            
             if (!text) return;
 
-            // Duplicate Prevention Logic
-            const isDuplicate = tasks.some(t => t.text.toLowerCase() === text.toLowerCase());
-            if (isDuplicate) {
+            if (tasks.some(t => t.text.toLowerCase() === text.toLowerCase())) {
                 warning.classList.remove('hidden');
                 input.classList.add('shake-error');
-                setTimeout(() => {
-                    warning.classList.add('hidden');
-                    input.classList.remove('shake-error');
-                }, 2500);
+                setTimeout(() => { warning.classList.add('hidden'); input.classList.remove('shake-error'); }, 2500);
                 return;
             }
 
@@ -177,19 +201,14 @@
         function renderTasks() {
             const list = document.getElementById('task-list');
             list.innerHTML = '';
-            
-            // Automatic Sort: Active first, then Completed
             tasks.sort((a, b) => a.completed - b.completed);
-
             tasks.forEach((task) => {
                 const li = document.createElement('li');
-                li.className = `group flex items-center justify-between p-4 rounded-2xl transition-all ${task.completed ? 'bg-slate-50 dark:bg-slate-800/40 opacity-60' : 'bg-slate-100 dark:bg-slate-700/50 hover:bg-white dark:hover:bg-slate-700 shadow-sm'}`;
+                li.className = `group flex items-center justify-between p-4 rounded-2xl transition-all ${task.completed ? 'bg-slate-50 dark:bg-slate-800/40 opacity-60' : 'bg-slate-100 dark:bg-slate-700/50 shadow-sm'}`;
                 li.innerHTML = `
                     <div class="flex items-center gap-3 flex-1">
-                        <input type="checkbox" ${task.completed ? 'checked' : ''} onchange="toggleTask(${task.id})" 
-                               class="w-5 h-5 rounded-full border-2 border-indigo-500 accent-indigo-600 cursor-pointer">
-                        <span contenteditable="true" onblur="editTask(${task.id}, this.innerText)" 
-                              class="outline-none focus:text-indigo-500 font-medium ${task.completed ? 'line-through' : ''}">${task.text}</span>
+                        <input type="checkbox" ${task.completed ? 'checked' : ''} onchange="toggleTask(${task.id})" class="w-5 h-5 rounded-full accent-indigo-600 cursor-pointer">
+                        <span contenteditable="true" onblur="editTask(${task.id}, this.innerText)" class="outline-none ${task.completed ? 'line-through' : ''}">${task.text}</span>
                     </div>
                     <button onclick="deleteTask(${task.id})" class="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">✕</button>
                 `;
@@ -221,11 +240,9 @@
             container.innerHTML = '';
             links.forEach((link, index) => {
                 const div = document.createElement('div');
-                div.className = "flex justify-between items-center group bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-transparent hover:border-emerald-500/30 transition-all";
-                div.innerHTML = `
-                    <a href="${link.url}" target="_blank" class="text-sm font-semibold text-emerald-600 dark:text-emerald-400 truncate">${link.name}</a>
-                    <button onclick="deleteLink(${index})" class="opacity-0 group-hover:opacity-100 text-xs text-red-500">Delete</button>
-                `;
+                div.className = "flex justify-between items-center group bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl";
+                div.innerHTML = `<a href="${link.url}" target="_blank" class="text-sm font-semibold text-emerald-600 dark:text-emerald-400 truncate">${link.name}</a>
+                                 <button onclick="deleteLink(${index})" class="opacity-0 group-hover:opacity-100 text-xs text-red-500">Delete</button>`;
                 container.appendChild(div);
             });
             localStorage.setItem('links', JSON.stringify(links));
@@ -235,8 +252,7 @@
             const name = document.getElementById('link-name').value.trim();
             const urlIn = document.getElementById('link-url').value.trim();
             if (!name || !urlIn) return;
-            const url = urlIn.startsWith('http') ? urlIn : `https://${urlIn}`;
-            links.push({ name, url });
+            links.push({ name, url: urlIn.startsWith('http') ? urlIn : `https://${urlIn}` });
             document.getElementById('link-name').value = '';
             document.getElementById('link-url').value = '';
             renderLinks();
